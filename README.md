@@ -4,15 +4,15 @@ A real-time interactive world map for digital nomads — find the sunniest citie
 
 ## Features
 
-- 🗺️ Interactive world map with 60+ cities
+- 🗺️ Interactive world map with 60+ cities, to be continued
 - ☀️ Live weather data powered by Open-Meteo API
 - 📊 Nomad Sunshine Index — scored by temperature & weather conditions
-- 🇨🇳 Dedicated China city rankings with province filter
+- 📍 Dedicated China area rankings with city filter
 - 🔍 Filter by: All / Sunny Only / Mild 15–25°C / Avoid Rain
 
 ## Live Demo
 
-🔗 [Coming soon](#)
+🔗 [Coming soon](#) 
 
 ## Run Locally
 
@@ -28,16 +28,16 @@ MIT © [littlecoolan](https://github.com/littlecoolan)
 
 ---
 
-# ☀️ SunChase — 全球晴天地图
+# ☀️ SunChase — 全球追光地图
 
-一个为数字游民设计的实时全球天气地图，帮你找到此刻阳光最充足的城市。
+一个为数字游民/旅居人设计的实时全球天气地图，帮你找到此刻阳光最充足的城市。
 
 ## 功能
 
-- 🗺️ 全球交互式地图，覆盖 60+ 城市
+- 🗺️ 全球交互式地图，覆盖 60+ 城市，持续更新中
 - ☀️ 实时天气数据（via Open-Meteo API）
 - 📊 游民指数评分算法（综合温度、天气状况）
-- 🇨🇳 中国城市单独分类，支持省份筛选
+- 📍 中国地区有专门分类，支持城市筛选
 - 🔍 多维度筛选：全部 / 仅晴天 / 舒适温度 15–25°C / 避开雨天
 
 ## 在线体验
