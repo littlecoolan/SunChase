@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SunChase — Global Sunshine Map</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<style>
+:root {
+  --sun:#FFD166; --cloud:#A8C4D0; --rain:#4A7FA5; --storm:#2C4A6E;
+  --bg:#0A0F1A; --bg2:#0F1825; --border:rgba(255,255,255,0.07);
+  --text:#E8EFF5; --muted:#6B8599;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
+
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 26px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.logo-mark{font-family:'Instrument Serif',serif;font-style:italic;font-size:20px;color:var(--sun);}
+.logo-tag{font-size:10px;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;margin-left:10px;}
+.hdr-right{display:flex;align-items:center;gap:14px;font-size:11px;color:var(--muted);}
+.pulse-badge{display:flex;align-items:center;gap:6px;padding:4px 11px;border:1px solid var(--border);border-radius:20px;font-size:10px;letter-spacing:.1em;}
+.pulse{width:6px;height:6px;border-radius:50%;background:#4ADE80;animation:pulse 2s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+.lang-btn{padding:4px 11px;background:transparent;border:1px solid var(--border);border-radius:20px;
+  color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.12em;
+  cursor:pointer;transition:all .2s;}
+.lang-btn:hover,.lang-btn.active{color:var(--sun);border-color:rgba(255,209,102,.3);}
+
+.main{display:grid;grid-template-columns:1fr 300px;flex:1;min-height:0;}
+.map-wrap{position:relative;overflow:hidden;background:var(--bg2);}
+#map-svg{width:100%;height:100%;cursor:grab;display:block;}
+#map-svg:active{cursor:grabbing;}
+
+/* GeoJSON styles */
+.land{fill:#1D3755;stroke:#3A6892;stroke-width:.6px;}
+.country-border{fill:none;stroke:#243550;stroke-width:.25px;}
+.cn-prov{fill:#1e2f46;stroke:#2D4060;stroke-width:.3px;transition:fill .5s;}
+
+/* Pins */
+.pin-group{cursor:pointer;}
+
+/* City name: hidden by default, shown on zoom */
+.pin-name{
+  font-family:'DM Mono',monospace;
+  fill:rgba(232,239,245,.88);
+  paint-order:stroke;stroke:#0A0F1A;stroke-width:2px;stroke-linejoin:round;
+  pointer-events:none;
+  display:none;
+}
+.pin-temp-label{pointer-events:none;}
+
+/* Tier visibility */
+.tier-2,.tier-3{display:none;}
+.zoom-med .tier-2{display:block;}
+.zoom-high .tier-2,.zoom-high .tier-3{display:block;}
+
+/* Show name label when zoomed in enough */
+.zoom-med  .pin-name{display:block;}
+.zoom-high .pin-name{display:block;}
+
+/* Controls */
+.map-controls{position:absolute;top:14px;left:14px;display:flex;flex-direction:column;gap:6px;z-index:20;}
+.map-btn{padding:7px 13px;background:rgba(10,15,26,.9);border:1px solid var(--border);border-radius:6px;
+  color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.1em;
+  cursor:pointer;text-transform:uppercase;transition:all .2s;backdrop-filter:blur(8px);}
+.map-btn:hover,.map-btn.active{color:var(--sun);border-color:rgba(255,209,102,.3);}
+.zoom-row{display:flex;gap:4px;}
+.zoom-row .map-btn{flex:1;font-size:15px;padding:5px 0;text-align:center;letter-spacing:0;}
+
+.season-bar{position:absolute;bottom:14px;left:14px;padding:9px 15px;
+  background:rgba(10,15,26,.9);border:1px solid var(--border);border-radius:8px;
+  backdrop-filter:blur(8px);z-index:20;}
+.season-label{font-size:9px;color:var(--muted);letter-spacing:.15em;text-transform:uppercase;margin-bottom:3px;}
+.season-val{font-family:'Instrument Serif',serif;font-style:italic;font-size:15px;color:var(--sun);}
+
+/* Loading */
+.loading{position:absolute;inset:0;background:var(--bg2);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:12px;z-index:50;transition:opacity .5s;}
+.loading.hidden{opacity:0;pointer-events:none;}
+.load-title{font-family:'Instrument Serif',serif;font-style:italic;font-size:18px;color:var(--sun);
+  animation:flicker 1.5s ease-in-out infinite;}
+.load-sub{font-size:10px;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;}
+@keyframes flicker{0%,100%{opacity:1}50%{opacity:.55}}
+
+/* Tooltip desktop */
+.tooltip{position:absolute;background:rgba(10,15,26,.96);border:1px solid var(--border);
+  border-radius:10px;padding:13px 17px;font-size:11px;pointer-events:none;
+  z-index:100;display:none;min-width:185px;backdrop-filter:blur(12px);}
+.tooltip.vis{display:block;}
+.tt-city{font-family:'Instrument Serif',serif;font-style:italic;font-size:17px;margin-bottom:6px;}
+.tt-row{display:flex;justify-content:space-between;color:var(--muted);margin-top:4px;}
+.tt-row span:last-child{color:var(--text);}
+
+/* Tooltip mobile */
+.tooltip-m{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);
+  background:rgba(10,15,26,.97);border:1px solid var(--border);border-radius:14px;
+  padding:15px 20px;font-size:12px;z-index:500;min-width:210px;max-width:88vw;
+  backdrop-filter:blur(16px);display:none;box-shadow:0 8px 32px rgba(0,0,0,.5);}
+.tooltip-m.vis{display:block;}
+.tm-close{position:absolute;top:9px;right:13px;font-size:18px;color:var(--muted);cursor:pointer;}
+
+/* Sidebar */
+.sidebar{border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+.sb-head{padding:17px 22px;border-bottom:1px solid var(--border);}
+.sb-title{font-family:'Instrument Serif',serif;font-style:italic;font-size:19px;margin-bottom:3px;}
+.sb-sub{font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;}
+.scope-tabs{display:flex;padding:12px 22px 8px;gap:6px;}
+.scope-tab{flex:1;padding:7px 4px;background:transparent;border:1px solid var(--border);border-radius:6px;
+  color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.06em;
+  cursor:pointer;transition:all .18s;text-align:center;}
+.scope-tab:hover{border-color:rgba(255,255,255,.2);color:var(--text);}
+.scope-tab.active{background:rgba(255,209,102,.12);color:var(--sun);border-color:rgba(255,209,102,.4);font-weight:500;}
+.tabs{display:flex;padding:4px 22px 12px;gap:5px;border-bottom:1px solid var(--border);}
+.tab{flex:1;padding:5px 2px;border:1px solid var(--border);border-radius:5px;background:transparent;
+  color:var(--muted);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.06em;
+  text-transform:uppercase;cursor:pointer;transition:all .18s;text-align:center;}
+.tab:hover{border-color:rgba(255,255,255,.2);color:var(--text);}
+.tab.active{background:var(--sun);color:#0A0F1A;border-color:var(--sun);font-weight:500;}
+.city-list{flex:1;overflow-y:auto;padding:10px 22px;}
+.city-list::-webkit-scrollbar{width:2px;}
+.city-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+.city-card{padding:11px 13px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px;
+  cursor:pointer;transition:all .18s;position:relative;overflow:hidden;}
+.city-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:2px 0 0 2px;}
+.city-card.sunny::before{background:var(--sun)}.city-card.cloudy::before{background:var(--cloud)}
+.city-card.rainy::before{background:var(--rain)}.city-card.stormy::before{background:var(--storm)}
+.city-card:hover{border-color:rgba(255,255,255,.15);background:rgba(255,255,255,.03);transform:translateX(2px);}
+.card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+.card-left{display:flex;align-items:center;gap:6px;}
+.card-rank{font-size:10px;width:15px;text-align:right;font-weight:500;}
+.card-name{font-family:'Instrument Serif',serif;font-style:italic;font-size:15px;}
+.card-en{font-size:9px;color:var(--muted);margin-left:3px;}
+.card-temp{font-size:16px;font-weight:300;}
+.card-meta{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);}
+.sbar{display:flex;gap:2px;align-items:center;}
+.sseg{width:11px;height:3px;border-radius:2px;background:var(--border);}
+.sseg.on{background:var(--sun);}
+.legend{padding:13px 22px;border-top:1px solid var(--border);}
+.legend-title{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;}
+.legend-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+.legend-item{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--muted);}
+.ldot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <span class="logo-mark">SunChase</span>
+    <span class="logo-tag">Global Sunshine Index for Nomads</span>
+  </div>
+  <div class="hdr-right">
+    <button class="lang-btn" id="lang-btn" onclick="toggleLang()">EN</button>
+    <span id="current-date"></span>
+    <div class="pulse-badge"><div class="pulse"></div><span id="live-label">实时数据</span></div>
+  </div>
+</header>
+
+<div class="main">
+  <div class="map-wrap" id="map-wrap">
+    <div class="loading" id="loading">
+      <div class="load-title">Scanning the globe...</div>
+      <div class="load-sub" id="load-sub">Loading map</div>
+    </div>
+
+    <svg id="map-svg">
+      <g id="g-base"></g>
+      <g id="g-pins"></g>
+    </svg>
+
+    <div class="map-controls">
+      <button class="map-btn active" onclick="filterMap('all',this)">All Regions</button>
+      <button class="map-btn" onclick="filterMap('sunny',this)">☀ Sunny Only</button>
+      <button class="map-btn" onclick="filterMap('mild',this)">○ Mild 15–25°C</button>
+      <div class="zoom-row">
+        <button class="map-btn" onclick="zoomBy(.6)">＋</button>
+        <button class="map-btn" onclick="zoomBy(-.6)">－</button>
+        <button class="map-btn" onclick="resetZoom()">⟳</button>
+      </div>
+    </div>
+
+    <div class="season-bar">
+      <div class="season-label">Current Season</div>
+      <div class="season-val" id="season-val">—</div>
+    </div>
+
+    <div class="tooltip" id="tooltip"></div>
+    <div class="tooltip-m" id="tooltip-m">
+      <span class="tm-close" onclick="document.getElementById('tooltip-m').classList.remove('vis')">×</span>
+      <div id="tm-content"></div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="sb-head">
+      <div class="sb-title">Top Nomad Spots</div>
+      <div class="sb-sub" id="sb-sub">Ranked by sunshine index</div>
+    </div>
+    <div class="scope-tabs">
+      <button class="scope-tab active" onclick="filterScope('global',this)">全球</button>
+      <button class="scope-tab" onclick="filterScope('china',this)">🇨🇳 中国</button>
+    </div>
+    <div class="tabs">
+      <button class="tab active" onclick="filterCond('all',this)">全部</button>
+      <button class="tab" onclick="filterCond('sunny',this)">仅晴天</button>
+      <button class="tab" onclick="filterCond('mild',this)">温度舒适</button>
+      <button class="tab" onclick="filterCond('avoid',this)">避开雨天</button>
+    </div>
+    <div class="city-list" id="city-list"></div>
+    <div class="legend">
+      <div class="legend-title">Weather Index</div>
+      <div class="legend-grid">
+        <div class="legend-item"><div class="ldot" style="background:var(--sun)"></div>Sunny 晴</div>
+        <div class="legend-item"><div class="ldot" style="background:var(--cloud)"></div>Cloudy 多云</div>
+        <div class="legend-item"><div class="ldot" style="background:var(--rain)"></div>Rainy 雨</div>
+        <div class="legend-item"><div class="ldot" style="background:var(--storm)"></div>Storm 雷暴</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ───────────────────────────────────────────────
+//  CITY DATA  — lat/lng are the single source of truth
+// ───────────────────────────────────────────────
+const CITIES = [
+  // Global tier-1
+  {n:"Lisbon",      zh:"里斯本",   co:"Portugal",  coZh:"葡萄牙",   r:"global",t:1,lat:38.72,lng:-9.14,  tmp:19,cond:"sunny", hum:55,wnd:14,sc:92,tz:"WET"},
+  {n:"Barcelona",   zh:"巴塞罗那", co:"Spain",     coZh:"西班牙",   r:"global",t:1,lat:41.39,lng:2.15,   tmp:18,cond:"sunny", hum:58,wnd:12,sc:88,tz:"CET"},
+  {n:"London",      zh:"伦敦",     co:"UK",        coZh:"英国",     r:"global",t:1,lat:51.51,lng:-0.13,  tmp:10,cond:"rainy", hum:88,wnd:20,sc:30,tz:"GMT"},
+  {n:"Dubai",       zh:"迪拜",     co:"UAE",       coZh:"阿联酋",   r:"global",t:1,lat:25.20,lng:55.27,  tmp:32,cond:"sunny", hum:40,wnd:11,sc:78,tz:"GST"},
+  {n:"Chiang Mai",  zh:"清迈",     co:"Thailand",  coZh:"泰国",     r:"global",t:1,lat:18.79,lng:98.98,  tmp:26,cond:"sunny", hum:60,wnd:6, sc:89,tz:"ICT"},
+  {n:"Bali",        zh:"巴厘岛",   co:"Indonesia", coZh:"印尼",     r:"global",t:1,lat:-8.34,lng:115.09, tmp:29,cond:"cloudy",hum:80,wnd:12,sc:70,tz:"WITA"},
+  {n:"Tokyo",       zh:"东京",     co:"Japan",     coZh:"日本",     r:"global",t:1,lat:35.69,lng:139.69, tmp:13,cond:"cloudy",hum:75,wnd:10,sc:55,tz:"JST"},
+  {n:"Sydney",      zh:"悉尼",     co:"Australia", coZh:"澳大利亚", r:"global",t:1,lat:-33.87,lng:151.21,tmp:25,cond:"sunny", hum:55,wnd:14,sc:88,tz:"AEDT"},
+  {n:"New York",    zh:"纽约",     co:"USA",       coZh:"美国",     r:"global",t:1,lat:40.71,lng:-74.01, tmp:12,cond:"cloudy",hum:62,wnd:16,sc:52,tz:"EST"},
+  {n:"Mexico City", zh:"墨西哥城", co:"Mexico",    coZh:"墨西哥",   r:"global",t:1,lat:19.43,lng:-99.13, tmp:21,cond:"cloudy",hum:55,wnd:9, sc:74,tz:"CST"},
+  {n:"Buenos Aires",zh:"布宜诺斯艾利斯",co:"Argentina",coZh:"阿根廷",r:"global",t:1,lat:-34.60,lng:-58.38,tmp:24,cond:"sunny", hum:62,wnd:16,sc:82,tz:"ART"},
+  {n:"Cape Town",   zh:"开普敦",   co:"S.Africa",  coZh:"南非",     r:"global",t:1,lat:-33.93,lng:18.42, tmp:23,cond:"sunny", hum:50,wnd:18,sc:87,tz:"SAST"},
+  {n:"Nairobi",     zh:"内罗毕",   co:"Kenya",     coZh:"肯尼亚",   r:"global",t:1,lat:-1.29,lng:36.82,  tmp:24,cond:"sunny", hum:52,wnd:8, sc:85,tz:"EAT"},
+  // Global tier-2
+  {n:"Porto",       zh:"波尔图",   co:"Portugal",  coZh:"葡萄牙",   r:"global",t:2,lat:41.16,lng:-8.63,  tmp:17,cond:"sunny", hum:60,wnd:16,sc:86,tz:"WET"},
+  {n:"Tbilisi",     zh:"第比利斯", co:"Georgia",   coZh:"格鲁吉亚", r:"global",t:2,lat:41.69,lng:44.83,  tmp:16,cond:"cloudy",hum:70,wnd:10,sc:72,tz:"GET"},
+  {n:"Medellín",    zh:"麦德林",   co:"Colombia",  coZh:"哥伦比亚", r:"global",t:2,lat:6.25,lng:-75.56,  tmp:22,cond:"sunny", hum:65,wnd:8, sc:90,tz:"COT"},
+  {n:"Kyoto",       zh:"京都",     co:"Japan",     coZh:"日本",     r:"global",t:2,lat:35.01,lng:135.77, tmp:13,cond:"rainy", hum:82,wnd:8, sc:45,tz:"JST"},
+  {n:"Hanoi",       zh:"河内",     co:"Vietnam",   coZh:"越南",     r:"global",t:2,lat:21.03,lng:105.85, tmp:25,cond:"rainy", hum:85,wnd:7, sc:40,tz:"ICT"},
+  {n:"Taipei",      zh:"台北",     co:"Taiwan",    coZh:"台湾",     r:"global",t:2,lat:25.03,lng:121.56, tmp:22,cond:"cloudy",hum:78,wnd:9, sc:68,tz:"CST"},
+  // China tier-1
+  {n:"昆明",co:"云南",r:"china",t:1,lat:25.05,lng:102.71,tmp:20,cond:"sunny", hum:48,wnd:8, sc:94,tz:"CST",en:"Kunming"},
+  {n:"三亚",co:"海南",r:"china",t:1,lat:18.25,lng:109.51,tmp:28,cond:"sunny", hum:62,wnd:10,sc:91,tz:"CST",en:"Sanya"},
+  {n:"大理",co:"云南",r:"china",t:1,lat:25.61,lng:100.27,tmp:18,cond:"sunny", hum:50,wnd:9, sc:88,tz:"CST",en:"Dali"},
+  {n:"成都",co:"四川",r:"china",t:1,lat:30.66,lng:104.07,tmp:16,cond:"cloudy",hum:74,wnd:6, sc:63,tz:"CST",en:"Chengdu"},
+  {n:"上海",co:"上海",r:"china",t:1,lat:31.23,lng:121.47,tmp:15,cond:"rainy", hum:80,wnd:11,sc:38,tz:"CST",en:"Shanghai"},
+  {n:"北京",co:"北京",r:"china",t:1,lat:39.91,lng:116.39,tmp:10,cond:"cloudy",hum:55,wnd:14,sc:55,tz:"CST",en:"Beijing"},
+  {n:"广州",co:"广东",r:"china",t:1,lat:23.13,lng:113.26,tmp:24,cond:"rainy", hum:88,wnd:9, sc:44,tz:"CST",en:"Guangzhou"},
+  {n:"杭州",co:"浙江",r:"china",t:1,lat:30.25,lng:120.17,tmp:16,cond:"rainy", hum:82,wnd:8, sc:42,tz:"CST",en:"Hangzhou"},
+  {n:"厦门",co:"福建",r:"china",t:1,lat:24.48,lng:118.09,tmp:21,cond:"sunny", hum:65,wnd:12,sc:82,tz:"CST",en:"Xiamen"},
+  {n:"西安",co:"陕西",r:"china",t:1,lat:34.27,lng:108.95,tmp:14,cond:"cloudy",hum:68,wnd:9, sc:60,tz:"CST",en:"Xi'an"},
+  // China tier-2
+  {n:"丽江",co:"云南",r:"china",t:2,lat:26.87,lng:100.23,tmp:17,cond:"sunny", hum:45,wnd:7, sc:87,tz:"CST",en:"Lijiang"},
+  {n:"西双版纳",co:"云南",r:"china",t:2,lat:22.01,lng:100.80,tmp:27,cond:"sunny",hum:66,wnd:5,sc:89,tz:"CST",en:"Xishuangbanna"},
+  {n:"海口",co:"海南",r:"china",t:2,lat:20.04,lng:110.32,tmp:26,cond:"sunny", hum:70,wnd:11,sc:83,tz:"CST",en:"Haikou"},
+  {n:"深圳",co:"广东",r:"china",t:2,lat:22.54,lng:114.06,tmp:24,cond:"rainy", hum:86,wnd:10,sc:46,tz:"CST",en:"Shenzhen"},
+  {n:"重庆",co:"重庆",r:"china",t:2,lat:29.56,lng:106.55,tmp:17,cond:"cloudy",hum:78,wnd:5, sc:60,tz:"CST",en:"Chongqing"},
+  {n:"武汉",co:"湖北",r:"china",t:2,lat:30.59,lng:114.31,tmp:16,cond:"cloudy",hum:76,wnd:9, sc:55,tz:"CST",en:"Wuhan"},
+  {n:"南京",co:"江苏",r:"china",t:2,lat:32.06,lng:118.78,tmp:14,cond:"rainy", hum:78,wnd:10,sc:40,tz:"CST",en:"Nanjing"},
+  {n:"青岛",co:"山东",r:"china",t:2,lat:36.07,lng:120.38,tmp:11,cond:"cloudy",hum:65,wnd:15,sc:62,tz:"CST",en:"Qingdao"},
+  {n:"拉萨",co:"西藏",r:"china",t:2,lat:29.65,lng:91.13, tmp:8, cond:"sunny", hum:30,wnd:12,sc:80,tz:"CST",en:"Lhasa"},
+  {n:"乌鲁木齐",co:"新疆",r:"china",t:2,lat:43.83,lng:87.62,tmp:6,cond:"sunny",hum:35,wnd:16,sc:69,tz:"CST",en:"Urumqi"},
+  {n:"哈尔滨",co:"黑龙江",r:"china",t:2,lat:45.75,lng:126.63,tmp:2,cond:"cloudy",hum:52,wnd:14,sc:40,tz:"CST",en:"Harbin"},
+  // China tier-3
+  {n:"南宁",co:"广西",r:"china",t:3,lat:22.82,lng:108.37,tmp:23,cond:"cloudy",hum:75,wnd:8, sc:70,tz:"CST",en:"Nanning"},
+  {n:"贵阳",co:"贵州",r:"china",t:3,lat:26.65,lng:106.63,tmp:15,cond:"cloudy",hum:80,wnd:7, sc:58,tz:"CST",en:"Guiyang"},
+  {n:"福州",co:"福建",r:"china",t:3,lat:26.07,lng:119.30,tmp:20,cond:"cloudy",hum:72,wnd:10,sc:66,tz:"CST",en:"Fuzhou"},
+  {n:"苏州",co:"江苏",r:"china",t:3,lat:31.30,lng:120.62,tmp:15,cond:"rainy", hum:79,wnd:9, sc:39,tz:"CST",en:"Suzhou"},
+  {n:"合肥",co:"安徽",r:"china",t:3,lat:31.82,lng:117.23,tmp:14,cond:"cloudy",hum:74,wnd:9, sc:52,tz:"CST",en:"Hefei"},
+  {n:"南昌",co:"江西",r:"china",t:3,lat:28.68,lng:115.86,tmp:18,cond:"rainy", hum:82,wnd:8, sc:44,tz:"CST",en:"Nanchang"},
+  {n:"济南",co:"山东",r:"china",t:3,lat:36.67,lng:117.00,tmp:12,cond:"cloudy",hum:62,wnd:13,sc:56,tz:"CST",en:"Jinan"},
+  {n:"天津",co:"天津",r:"china",t:3,lat:39.13,lng:117.20,tmp:11,cond:"cloudy",hum:58,wnd:13,sc:53,tz:"CST",en:"Tianjin"},
+  {n:"石家庄",co:"河北",r:"china",t:3,lat:38.05,lng:114.48,tmp:11,cond:"cloudy",hum:60,wnd:11,sc:50,tz:"CST",en:"Shijiazhuang"},
+  {n:"太原",co:"山西",r:"china",t:3,lat:37.87,lng:112.55,tmp:9, cond:"cloudy",hum:52,wnd:12,sc:52,tz:"CST",en:"Taiyuan"},
+  {n:"呼和浩特",co:"内蒙古",r:"china",t:3,lat:40.84,lng:111.75,tmp:5,cond:"sunny",hum:38,wnd:18,sc:65,tz:"CST",en:"Hohhot"},
+  {n:"沈阳",co:"辽宁",r:"china",t:3,lat:41.80,lng:123.43,tmp:8, cond:"cloudy",hum:58,wnd:14,sc:50,tz:"CST",en:"Shenyang"},
+  {n:"长春",co:"吉林",r:"china",t:3,lat:43.88,lng:125.35,tmp:4, cond:"cloudy",hum:55,wnd:13,sc:45,tz:"CST",en:"Changchun"},
+  {n:"长沙",co:"湖南",r:"china",t:3,lat:28.23,lng:112.94,tmp:17,cond:"rainy", hum:80,wnd:8, sc:46,tz:"CST",en:"Changsha"},
+  {n:"郑州",co:"河南",r:"china",t:3,lat:34.75,lng:113.62,tmp:13,cond:"cloudy",hum:62,wnd:11,sc:54,tz:"CST",en:"Zhengzhou"},
+  {n:"珠海",co:"广东",r:"china",t:3,lat:22.27,lng:113.57,tmp:23,cond:"cloudy",hum:80,wnd:10,sc:58,tz:"CST",en:"Zhuhai"},
+  {n:"兰州",co:"甘肃",r:"china",t:3,lat:36.06,lng:103.79,tmp:10,cond:"sunny", hum:42,wnd:13,sc:70,tz:"CST",en:"Lanzhou"},
+  {n:"西宁",co:"青海",r:"china",t:3,lat:36.62,lng:101.78,tmp:6, cond:"sunny", hum:40,wnd:12,sc:68,tz:"CST",en:"Xining"},
+  {n:"银川",co:"宁夏",r:"china",t:3,lat:38.47,lng:106.27,tmp:9, cond:"sunny", hum:38,wnd:15,sc:72,tz:"CST",en:"Yinchuan"},
+];
+
+const COL = {sunny:"#FFD166",cloudy:"#A8C4D0",rainy:"#4A7FA5",stormy:"#2C4A6E"};
+const ICN = {sunny:"☀️",cloudy:"⛅",rainy:"🌧",stormy:"⛈"};
+const ZH  = {sunny:"晴",cloudy:"多云",rainy:"雨",stormy:"雷暴"};
+
+let lang = 'zh';
+const T = {
+  zh:{
+    logoTag:'全球阳光指数 · 数字游民', liveData:'实时数据',
+    loadTitle:'扫描全球中...', loadSub:'加载地图',
+    allRegions:'全部地区', sunnyOnly:'☀️ 仅晴天', mildFilter:'○ 适宜 15–25°C',
+    seasonLabel:'当前季节', sbTitle:'游民热门目的地',
+    scopeGlobal:'全球', scopeChina:'🇨🇳 中国',
+    tabAll:'全部', tabSunny:'仅晴天', tabMild:'温度舒适', tabAvoid:'避开雨天',
+    legendTitle:'天气指数',
+    lgItems:['晴','多云','雨','雷暴'],
+    fl:{all:'按阳光指数排名',sunny:'仅晴天',mild:'舒适 15–25°C',avoid:'避开雨天'},
+    cond:{sunny:'晴',cloudy:'多云',rainy:'雨',stormy:'雷暴'},
+    ttWeather:'天气', ttTemp:'温度', ttScore:'游民指数',
+    ttLoading:'实时数据加载中...',
+    season:['冬季','冬季','春季','春季','春季','夏季','夏季','夏季','秋季','秋季','秋季','冬季'],
+    seasonSuffix:' · 北半球',
+    dateLocale:'zh-CN', dateSuffix:' 实时', dateLoading:' 加载中...',
+  },
+  en:{
+    logoTag:'Global Sunshine Index for Nomads', liveData:'Live Data',
+    loadTitle:'Scanning the globe...', loadSub:'Loading map',
+    allRegions:'All Regions', sunnyOnly:'☀️ Sunny Only', mildFilter:'○ Mild 15–25°C',
+    seasonLabel:'Current Season', sbTitle:'Top Nomad Spots',
+    scopeGlobal:'Global', scopeChina:'🇨🇳 China',
+    tabAll:'All', tabSunny:'Sunny', tabMild:'Comfortable', tabAvoid:'Avoid Rain',
+    legendTitle:'Weather Index',
+    lgItems:['Sunny','Cloudy','Rainy','Storm'],
+    fl:{all:'Ranked by sunshine index',sunny:'Sunny only',mild:'Comfortable 15–25°C',avoid:'Avoid rain'},
+    cond:{sunny:'Sunny',cloudy:'Cloudy',rainy:'Rainy',stormy:'Storm'},
+    ttWeather:'Weather', ttTemp:'Temp', ttScore:'Nomad Score',
+    ttLoading:'Loading live data...',
+    season:['Winter','Winter','Spring','Spring','Spring','Summer','Summer','Summer','Autumn','Autumn','Autumn','Winter'],
+    seasonSuffix:' · N.Hemisphere',
+    dateLocale:'en-US', dateSuffix:' live', dateLoading:' loading...',
+  }
+};
+
+let cities = CITIES.map(c=>({...c, tmin:c.tmp, tmax:c.tmp}));
+let currentScope = 'global'; // 'global' | 'china'
+let currentCond  = 'all';   // 'all' | 'sunny' | 'mild' | 'avoid'
+let dataLoaded = false;
+let proj, zoomBeh;
+
+// ───────────────────────────────────────────────
+//  MAP INIT (D3 + TopoJSON)
+// ───────────────────────────────────────────────
+async function initMap() {
+  const wrap = document.getElementById('map-wrap');
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  const svg = d3.select('#map-svg').attr('width',W).attr('height',H);
+  const gBase = d3.select('#g-base');
+  const gPins = d3.select('#g-pins');
+
+  // 取宽/高两个方向中较大的 scale，确保地图填满容器
+  const fitScale = Math.max(W / 6.28, H / 3.28);
+  proj = d3.geoNaturalEarth1()
+    .scale(fitScale)
+    .translate([W/2, H/2]);
+
+  const path = d3.geoPath().projection(proj);
+
+  zoomBeh = d3.zoom()
+    .scaleExtent([1, 14])
+    .translateExtent([[0, 0], [W, H]])
+    .on('zoom', ev => {
+      const t = ev.transform;
+      gBase.attr('transform', t);
+      gPins.attr('transform', t);
+      // 反向缩放每个 pin，使其屏幕位置随地图移动，但视觉大小自适应
+      const inv = 1 / t.k;
+      // 字号随 zoom 增大，用 pow(k, 0.55) 保证增速适中（k=1→5px, k=4→11px, k=14→18px）
+      const iconSize = Math.max(18, Math.min(32, 18 * Math.pow(t.k, 0.4)));
+      const nameSize = Math.max(8,  Math.min(20, 8  * Math.pow(t.k, 0.5)));
+      document.querySelectorAll('.pin-group').forEach(p => {
+        const x = +p.dataset.x, y = +p.dataset.y;
+        p.setAttribute('transform', `translate(${x},${y}) scale(${inv})`);
+      });
+      document.querySelectorAll('.pin-name').forEach(el => {
+        el.style.fontSize = nameSize + 'px';
+        el.setAttribute('y', -(iconSize / 2 + 5));
+      });
+      document.querySelectorAll('.pin-temp-label').forEach(el => {
+        el.style.fontSize = iconSize + 'px';
+      });
+      const pEl = document.getElementById('g-pins');
+      pEl.classList.remove('zoom-med','zoom-high');
+      if      (t.k >= 3)   pEl.classList.add('zoom-high');
+      else if (t.k >= 1.8) pEl.classList.add('zoom-med');
+    });
+
+  svg.call(zoomBeh)
+     .on('dblclick.zoom', null); // disable dbl-click zoom
+
+  // Dismiss mobile tooltip on map background tap
+  svg.on('click', e => {
+    if (!e.target.closest('.pin-group'))
+      document.getElementById('tooltip-m').classList.remove('vis');
+  });
+
+  // Ocean background
+  gBase.append('path').datum({type:'Sphere'})
+    .attr('fill','#0a1a2e').attr('stroke','#1c3a56').attr('stroke-width','1').attr('d',path);
+  // Graticule grid
+  gBase.append('path').datum(d3.geoGraticule()())
+    .attr('stroke','#1a3450').attr('stroke-width','.3').attr('fill','none').attr('d',path);
+
+  document.getElementById('load-sub').textContent = 'Loading world map...';
+  try {
+    const world = await fetch(
+      'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
+    ).then(r => r.json());
+
+    // Merged land mass
+    gBase.append('path')
+      .datum(topojson.feature(world, world.objects.land))
+      .attr('class','land')
+      .attr('fill','#1D3755').attr('stroke','none').attr('d', path);
+
+    // Country borders
+    gBase.append('path')
+      .datum(topojson.mesh(world, world.objects.countries, (a,b) => a !== b))
+      .attr('fill','none').attr('stroke','#2E5478').attr('stroke-width','.35').attr('d', path);
+
+    // Equator + tropics
+    [{lat:23.5,dash:'3 4',op:.4},{lat:-23.5,dash:'3 4',op:.4},{lat:0,dash:'none',op:.7}].forEach(({lat,dash,op}) => {
+      gBase.append('path')
+        .datum({type:'Feature',geometry:{type:'LineString',coordinates:[[-180,lat],[180,lat]]}})
+        .attr('stroke',`rgba(58,104,146,${op})`).attr('stroke-width',lat===0?'.7':'.4')
+        .attr('stroke-dasharray',dash).attr('fill','none').attr('d',path);
+    });
+  } catch(e) {
+    console.warn('World atlas load failed, using fallback', e);
+    drawFallbackMap(gBase, path);
+  }
+
+  renderPins();
+  document.getElementById('loading').classList.add('hidden');
+}
+
+// ───────────────────────────────────────────────
+//  FALLBACK MAP — inline simplified world paths
+//  (used when GeoJSON CDN is unreachable)
+// ───────────────────────────────────────────────
+function drawFallbackMap(gBase, path) {
+  // Ocean background via sphere
+  const sphere = {type:'Sphere'};
+  gBase.append('path').datum(sphere).attr('fill','#0a1a2e').attr('stroke','#1c3a56').attr('stroke-width','1').attr('d',path);
+  // Graticule grid
+  gBase.append('path').datum(d3.geoGraticule()()).attr('stroke','#1a3450').attr('stroke-width','.3').attr('fill','none').attr('d',path);
+
+  const lands = [
+    // North America (detailed)
+    {type:'Feature',geometry:{type:'Polygon',coordinates:[[
+      [-168,72],[-140,70],[-120,72],[-80,73],[-65,68],[-55,60],[-55,47],[-66,44],[-70,42],[-75,37],[-80,32],[-85,30],[-88,15],[-85,10],[-77,8],[-78,12],[-82,18],[-87,22],[-90,20],[-96,19],[-100,22],[-105,22],[-110,23],[-115,29],[-118,34],[-122,37],[-124,42],[-124,49],[-123,55],[-130,58],[-135,60],[-140,60],[-145,62],[-152,60],[-158,58],[-162,60],[-165,65],[-168,70],[-168,72]
+    ]]}},
+    // Greenland
+    {type:'Feature',geometry:{type:'Polygon',coordinates:[[
+      [-44,82],[-18,76],[-18,70],[-25,65],[-45,60],[-52,65],[-55,70],[-50,76],[-44,82]
+    ]]}},
+    // South America (detailed)
+    {type:'Feature',geometry:{type:'Polygon',coordinates:[[
+      [-80,10],[-75,12],[-70,12],[-62,12],[-60,7],[-52,4],[-50,0],[-45,-3],[-35,-5],[-35,-10],[-38,-15],[-40,-20],[-42,-23],[-44,-24],[-45,-30],[-52,-33],[-58,-35],[-62,-38],[-65,-42],[-66,-46],[-67,-52],[-68,-55],[-65,-55],[-63,-50],[-60,-45],[-57,-40],[-55,-33],[-52,-28],[-48,-28],[-44,-22],[-42,-18],[-40,-12],[-42,-5],[-48,-1],[-52,2],[-58,5],[-62,6],[-67,2],[-72,-2],[-75,0],[-78,2],[-80,5],[-80,10]
+    ]]}},
+    // Europe (detailed)
+    {type:'Feature',geometry:{type:'Polygon',coordinates:[[
+      [-10,36],[-6,36],[0,36],[5,36],[10,38],[15,38],[18,40],[20,38],[22,37],[26,37],[28,36],[30,38],[28,42],[24,44],[20,44],[18,46],[14,46],[12,44],[10,44],[8,46],[6,47],[2,51],[0,51],[-2,52],[-5,54],[-8,52],[-10,44],[-8,38],[-10,36]
+    ]]}},
+    // Scandinavia
+    {type:'Feature',geometry:{type:'Polygon',coordinates:[[
+      [4,52],[8,55],[10,58],[5,58],[5,62],[8,63],[14,65],[18,68],[20,70],[25,70],[28,72],[30,70],[28,65],[26,62],[24,60],[22,58],[24,56],[22,55],[18,55],[14,55],[10,55],[8,55],[6,52],[4,52]
+    ]]}},
+    // Africa (detailed)
+    {type:'Feature',geometry:{type:'Polygon',coordinates:[[
+      [-18,15],[-16,20],[-14,24],[-12,24],[-8,22],[-5,22],[0,20],[5,18],[10,18],[15,20],[20,20],[24,20],[28,18],[32,20],[36,18],[40,12],[42,10],[44,8],[42,2],[40,-4],[38,-8],[36,-12],[34,-16],[32,-20],[30,-22],[28,-26],[26,-28],[22,-34],[18,-34],[16,-30],[14,-24],[12,-18],[10,-12],[8,-4],[4,2],[2,6],[0,8],[-4,10],[-8,12],[-12,12],[-15,12],[-18,15]
+    ]]}},
+    // Europe + Russia west
+    {type:'Feature',geometry:{type:'Polygon',coordinates:[[
+      [26,70],[32,72],[40,72],[50,70],[60,68],[70,68],[80,70],[100,70],[120,72],[140,70],[160,68],[180,68],[180,50],[170,48],[160,50],[150,48],[140,46],[135,48],[130,42],[120,38],[115,38],[110,40],[105,42],[100,42],[95,44],[90,44],[85,46],[80,48],[75,46],[70,44],[65,44],[60,48],[55,50],[50,48],[45,46],[40,48],[36,48],[30,50],[26,54],[24,58],[26,62],[24,66],[26,70]
+    ]]}},
+    // Middle East
+    {type:'Feature',geometry:{type:'Polygon',coordinates:[[
+      [26,38],[30,38],[34,36],[36,36],[40,36],[44,38],[48,38],[52,36],[56,32],[58,26],[56,22],[54,18],[50,14],[46,14],[42,12],[38,14],[34,18],[30,20],[26,22],[24,26],[26,30],[26,38]
+    ]]}},
+    // South Asia (India)
+    {type:'Feature',geometry:{type:'Polygon',coordinates:[[
+      [62,36],[68,36],[72,34],[74,32],[78,30],[82,28],[88,26],[92,24],[92,22],[88,20],[84,16],[80,12],[78,8],[76,8],[72,10],[68,22],[64,28],[60,32],[62,36]
+    ]]}},
+    // China + East Asia
+    {type:'Feature',geometry:{type:'Polygon',coordinates:[[
+      [76,38],[80,42],[85,46],[90,48],[95,46],[100,44],[105,44],[110,40],[115,38],[120,38],[126,40],[130,42],[135,46],[138,46],[138,40],[134,38],[130,34],[126,32],[122,30],[120,26],[118,22],[114,20],[110,18],[106,18],[102,20],[100,22],[98,24],[96,26],[92,28],[88,28],[84,30],[80,34],[76,38]
+    ]]}},
+    // Southeast Asia
+    {type:'Feature',geometry:{type:'Polygon',coordinates:[[
+      [98,28],[100,22],[102,18],[104,14],[102,10],[100,6],[102,2],[106,2],[110,0],[112,-2],[114,-4],[112,-8],[108,-8],[104,-6],[100,-2],[96,2],[94,6],[92,10],[94,16],[96,20],[98,24],[98,28]
+    ]]}},
+    // Japan
+    {type:'Feature',geometry:{type:'Polygon',coordinates:[[
+      [130,32],[132,34],[134,34],[136,36],[138,38],[140,40],[142,42],[144,44],[142,44],[140,42],[138,40],[136,36],[134,34],[132,34],[130,32]
+    ]]}},
+    // Australia (detailed)
+    {type:'Feature',geometry:{type:'Polygon',coordinates:[[
+      [114,-22],[116,-20],[122,-18],[128,-14],[132,-12],[136,-12],[138,-14],[136,-16],[130,-12],[136,-16],[140,-18],[144,-18],[148,-20],[152,-24],[154,-28],[152,-32],[150,-36],[148,-38],[144,-38],[140,-36],[136,-34],[130,-32],[126,-34],[122,-34],[118,-30],[114,-26],[114,-22]
+    ]]}},
+    // New Zealand (approx)
+    {type:'Feature',geometry:{type:'Polygon',coordinates:[[
+      [172,-34],[174,-36],[176,-38],[178,-38],[178,-42],[176,-44],[172,-44],[170,-42],[168,-44],[168,-46],[170,-46],[172,-42],[174,-40],[172,-34]
+    ]]}},
+  ];
+
+  gBase.selectAll('.land-fb')
+    .data(lands)
+    .enter().append('path')
+    .attr('class','land')
+    .attr('fill','#1D3755').attr('stroke','#3A6892').attr('stroke-width','.6')
+    .attr('d', path);
+
+  // Equator + tropics
+  [{lat:23.5,dash:'3 4',op:.4},{lat:-23.5,dash:'3 4',op:.4},{lat:0,dash:'none',op:.7}].forEach(({lat,dash,op}) => {
+    gBase.append('path')
+      .datum({type:'Feature',geometry:{type:'LineString',coordinates:[[-180,lat],[180,lat]]}})
+      .attr('stroke',`rgba(36,53,80,${op})`).attr('stroke-width',lat===0?'.6':'.4')
+      .attr('stroke-dasharray',dash).attr('fill','none').attr('d',path);
+  });
+}
+
+// ───────────────────────────────────────────────
+//  RENDER PINS
+//  Default view: colored dot + temperature number only
+//  zoom-med (≥1.8x): adds city name label
+//  zoom-high (≥3x): shows all tier-3 pins too
+// ───────────────────────────────────────────────
+function renderPins() {
+  const g = document.getElementById('g-pins');
+  g.innerHTML = cities.map(c => {
+    const pt = proj([c.lng, c.lat]);
+    if (!pt) return '';
+    const [px, py] = pt;
+    const col = COL[c.cond];
+    const pinName = lang==='zh' ? (c.zh || c.n) : (c.en || c.n);
+    return `
+<g class="pin-group tier-${c.t}" data-city="${c.n}" data-x="${px}" data-y="${py}"
+   transform="translate(${px},${py})"
+   onmouseenter="showTip(event,'${c.n}')" onmouseleave="hideTip()"
+   onclick="showTip(event,'${c.n}')">
+  <text class="pin-temp-label" x="0" y="0.5" text-anchor="middle"
+    font-size="18" font-family="DM Mono,monospace" fill="${col}" dominant-baseline="middle">${ICN[c.cond]}</text>
+  <text class="pin-name" x="0" y="-13" text-anchor="middle" style="font-size:8px">${pinName}</text>
+  <circle cx="0" cy="0" r="16" fill="transparent"/>
+</g>`;
+  }).join('');
+}
+
+// Color China provinces by weather condition
+function colorProvinces() {
+  document.querySelectorAll('.cn-prov').forEach(el => {
+    const name = el.getAttribute('data-name') || '';
+    const city = cities.filter(c=>c.r==='china').find(c => {
+      const prov = c.co.replace(/省|市|自治区|特别行政区/g,'');
+      return name.includes(prov) || prov.includes(name.slice(0,2));
+    });
+    if (city) {
+      const hex = COL[city.cond];
+      el.style.fill = hex + '22';
+    }
+  });
+}
+
+// ───────────────────────────────────────────────
+//  WEATHER API
+// ───────────────────────────────────────────────
+function wmo(code) {
+  if (code<=1) return 'sunny';
+  if (code<=3) return 'cloudy';
+  if (code<=49) return 'cloudy';
+  if (code<=82) return 'rainy';
+  return 'stormy';
+}
+
+function calcSc(tmp, hum, wnd, cond) {
+  let s = 100;
+  if (cond==='cloudy') s-=15;
+  if (cond==='rainy')  s-=40;
+  if (cond==='stormy') s-=60;
+  s -= Math.max(0, Math.abs(tmp-22)-4)*2;
+  if (hum>65) s -= (hum-65)*.4;
+  if (wnd>20)  s -= (wnd-20)*.5;
+  return Math.max(5, Math.min(99, Math.round(s)));
+}
+
+async function fetchWeather() {
+  const CHUNK = 20;
+  let done = 0;
+  for (let i=0; i<cities.length; i+=CHUNK) {
+    const chunk = cities.slice(i, i+CHUNK);
+    const lats = chunk.map(c=>c.lat).join(',');
+    const lngs = chunk.map(c=>c.lng).join(',');
+    try {
+      const data = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lngs}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min&wind_speed_unit=kmh&timezone=auto`
+      ).then(r=>r.json());
+      const results = Array.isArray(data) ? data : [data];
+      results.forEach((res, idx) => {
+        const c = chunk[idx];
+        if (!c || !res.current) return;
+        const cur = res.current;
+        c.cond = wmo(cur.weather_code);
+        c.tmp  = Math.round(cur.temperature_2m);
+        c.hum  = Math.round(cur.relative_humidity_2m);
+        c.wnd  = Math.round(cur.wind_speed_10m);
+        c.tmax = res.daily ? Math.round(res.daily.temperature_2m_max[0]) : c.tmp;
+        c.tmin = res.daily ? Math.round(res.daily.temperature_2m_min[0]) : c.tmp;
+        c.sc   = calcSc(c.tmp, c.hum, c.wnd, c.cond);
+        done++;
+      });
+    } catch(e) { console.warn(e); }
+    document.getElementById('load-sub').textContent = `Weather ${Math.round(done/cities.length*100)}%`;
+  }
+  dataLoaded = true;
+  const _t = T[lang];
+  document.getElementById('current-date').textContent =
+    new Date().toLocaleString(_t.dateLocale,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) + _t.dateSuffix;
+}
+
+// ───────────────────────────────────────────────
+//  SIDEBAR
+// ───────────────────────────────────────────────
+const FL = {all:'Ranked by sunshine index',sunny:'Sunny destinations',
+            mild:'Comfortable 15–25°C',avoid:'High rain / storm risk',china:'🇨🇳 国内城市晴天排名'};
+
+function sbar(sc) {
+  const n = Math.round(sc/20);
+  return '<div class="sbar">'+Array.from({length:5},(_,i)=>`<div class="sseg${i<n?' on':''}"></div>`).join('')+'</div>';
+}
+
+function renderCities() {
+  const list = cities.filter(c => {
+    if (currentScope==='china' && c.r!=='china') return false;
+    if (currentCond==='sunny') return c.cond==='sunny';
+    if (currentCond==='mild')  return c.tmp>=15 && c.tmp<=25;
+    if (currentCond==='avoid') return c.cond==='rainy' || c.cond==='stormy';
+    return true;
+  }).sort((a,b)=>b.sc-a.sc);
+  const rc = ['var(--sun)','#C0C0C0','#CD7F32'];
+  document.getElementById('city-list').innerHTML = list.map((c,i)=>`
+    <div class="city-card ${c.cond}" onclick="focusCity('${c.n}')">
+      <div class="card-top">
+        <div class="card-left">
+          <span class="card-rank" style="color:${rc[i]||'var(--muted)'}">${i+1}</span>
+          <span style="font-size:12px">${ICN[c.cond]}</span>
+          <span class="card-name">${lang==='zh' ? (c.zh||c.n) : (c.en||c.n)}</span>
+          ${(c.zh||c.en)?`<span class="card-en">${lang==='zh' ? (c.en||c.n) : (c.zh||c.n)}</span>`:''}
+        </div>
+        <span class="card-temp" style="color:${COL[c.cond]}">${c.tmp}°</span>
+      </div>
+      <div class="card-meta">
+        <span>${lang==='zh'?(c.coZh||c.co):c.co} · ${T[lang].cond[c.cond]}</span>
+        <div style="display:flex;align-items:center;gap:5px">
+          ${sbar(c.sc)}<span style="color:${COL[c.cond]}">${c.sc}</span>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function filterScope(scope, btn) {
+  document.querySelectorAll('.scope-tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  currentScope = scope;
+  document.querySelectorAll('.pin-group').forEach(p=>{
+    const c = cities.find(x=>x.n===p.dataset.city);
+    if (!c) return;
+    p.style.opacity = scope==='china' ? (c.r==='china'?'1':'0.07') : '1';
+  });
+  updateSbSub();
+  renderCities();
+}
+
+function filterCond(cond, btn) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  currentCond = cond;
+  updateSbSub();
+  renderCities();
+}
+
+function updateSbSub() {
+  const t = T[lang];
+  const scopePfx = currentScope==='china' ? (lang==='zh'?'中国 · ':'China · ') : '';
+  document.getElementById('sb-sub').textContent = scopePfx + (t.fl[currentCond]||'');
+}
+
+function filterMap(type, btn) {
+  document.querySelectorAll('.map-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.pin-group').forEach(p=>{
+    const c = cities.find(x=>x.n===p.dataset.city);
+    if (!c) return;
+    let show = type==='all' || (type==='sunny'&&c.cond==='sunny') || (type==='mild'&&c.tmp>=15&&c.tmp<=25);
+    p.style.opacity = show ? '1' : '0.08';
+  });
+}
+
+// ───────────────────────────────────────────────
+//  TOOLTIP
+// ───────────────────────────────────────────────
+const isTouch = ()=>window.matchMedia('(pointer:coarse)').matches;
+
+function tipHTML(c) {
+  const t = T[lang];
+  const cityName = lang==='zh' ? (c.zh||c.n) : (c.en||c.n);
+  const citySub  = lang==='zh' ? (c.en||null) : (c.zh||null);
+  return `<div class="tt-city" style="color:${COL[c.cond]}">${ICN[c.cond]} ${cityName}${citySub?` <span style="font-size:11px;opacity:.6">${citySub}</span>`:''}</div>
+    <div class="tt-row"><span>${t.ttWeather}</span><span>${t.cond[c.cond]}</span></div>
+    <div class="tt-row"><span>${t.ttTemp}</span><span>${c.tmin}° – ${c.tmax}°C</span></div>
+    <div class="tt-row"><span>${t.ttScore}</span><span style="color:${COL[c.cond]}">${c.sc}/100</span></div>
+    ${!dataLoaded?`<div style="font-size:9px;color:var(--muted);margin-top:5px">${t.ttLoading}</div>`:''}`;
+}
+
+function showTip(e, name) {
+  const c = cities.find(x=>x.n===name);
+  if (!c) return;
+  if (isTouch()) {
+    document.getElementById('tm-content').innerHTML = tipHTML(c);
+    document.getElementById('tooltip-m').classList.add('vis');
+    return;
+  }
+  const tip = document.getElementById('tooltip');
+  tip.innerHTML = tipHTML(c);
+  const wr = document.getElementById('map-wrap').getBoundingClientRect();
+  let lx = e.clientX - wr.left + 14, ly = e.clientY - wr.top - 20;
+  if (lx+210>wr.width)  lx -= 220;
+  if (ly+200>wr.height) ly -= 200;
+  tip.style.left = lx+'px'; tip.style.top = ly+'px';
+  tip.classList.add('vis');
+}
+
+function hideTip() { document.getElementById('tooltip').classList.remove('vis'); }
+
+function focusCity(name) {
+  const c = cities.find(x=>x.n===name);
+  if (!c || !proj) return;
+  const [px,py] = proj([c.lng,c.lat]);
+  const wr = document.getElementById('map-wrap');
+  const sc = 5, tx = wr.clientWidth/2 - sc*px, ty = wr.clientHeight/2 - sc*py;
+  d3.select('#map-svg').transition().duration(600)
+    .call(zoomBeh.transform, d3.zoomIdentity.translate(tx,ty).scale(sc));
+}
+
+// ───────────────────────────────────────────────
+//  ZOOM BUTTONS
+// ───────────────────────────────────────────────
+function zoomBy(delta) {
+  d3.select('#map-svg').transition().duration(220)
+    .call(zoomBeh.scaleBy, Math.exp(delta));
+}
+function resetZoom() {
+  d3.select('#map-svg').transition().duration(380)
+    .call(zoomBeh.transform, d3.zoomIdentity);
+}
+
+// ───────────────────────────────────────────────
+//  INIT
+// ───────────────────────────────────────────────
+function getSeason() {
+  const t = T[lang];
+  return t.season[new Date().getMonth()] + t.seasonSuffix;
+}
+
+function applyLang(l) {
+  lang = l;
+  const t = T[l];
+  document.getElementById('lang-btn').textContent = l==='zh' ? 'EN' : '中';
+  document.querySelector('.logo-tag').textContent = t.logoTag;
+  document.getElementById('live-label').textContent = t.liveData;
+  document.querySelector('.load-title').textContent = t.loadTitle;
+  // 地图控制按钮（仅直接子按钮，不含缩放行）
+  const mapBtns = document.querySelectorAll('.map-controls > .map-btn');
+  if (mapBtns[0]) mapBtns[0].textContent = t.allRegions;
+  if (mapBtns[1]) mapBtns[1].textContent = t.sunnyOnly;
+  if (mapBtns[2]) mapBtns[2].textContent = t.mildFilter;
+  document.querySelector('.season-label').textContent = t.seasonLabel;
+  document.getElementById('season-val').textContent = getSeason();
+  document.querySelector('.sb-title').textContent = t.sbTitle;
+  updateSbSub();
+  const scopeTabs = document.querySelectorAll('.scope-tab');
+  if (scopeTabs[0]) scopeTabs[0].textContent = t.scopeGlobal;
+  if (scopeTabs[1]) scopeTabs[1].textContent = t.scopeChina;
+  const tabs = document.querySelectorAll('.tab');
+  if (tabs[0]) tabs[0].textContent = t.tabAll;
+  if (tabs[1]) tabs[1].textContent = t.tabSunny;
+  if (tabs[2]) tabs[2].textContent = t.tabMild;
+  if (tabs[3]) tabs[3].textContent = t.tabAvoid;
+  document.querySelector('.legend-title').textContent = t.legendTitle;
+  const lgColors = ['var(--sun)','var(--cloud)','var(--rain)','var(--storm)'];
+  document.querySelector('.legend-grid').innerHTML = t.lgItems.map((label, i) =>
+    `<div class="legend-item"><div class="ldot" style="background:${lgColors[i]}"></div>${label}</div>`
+  ).join('');
+  renderCities();
+  renderPins();
+}
+
+function toggleLang() { applyLang(lang==='zh' ? 'en' : 'zh'); }
+
+async function init() {
+  document.getElementById('current-date').textContent =
+    new Date().toLocaleDateString(T[lang].dateLocale,{month:'short',day:'numeric'}) + T[lang].dateLoading;
+  document.getElementById('season-val').textContent = getSeason();
+  updateSbSub();
+  renderCities();
+  await initMap();
+  await fetchWeather();
+  renderPins();
+  renderCities();
+  colorProvinces();
+}
+
+window.addEventListener('resize', () => {
+  const wrap = document.getElementById('map-wrap');
+  d3.select('#map-svg').attr('width', wrap.clientWidth).attr('height', wrap.clientHeight);
+});
+
+init();
+</script>
+</body>
+</html>
