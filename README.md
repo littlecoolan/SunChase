@@ -2,6 +2,8 @@
 
 A real-time interactive world map for digital nomads — find the sunniest cities on Earth right now.
 
+<img width="1401" height="730" alt="英文介面" src="https://github.com/user-attachments/assets/ab199873-29ea-4652-95c6-c2c91aabbe10" />
+
 ## Features
 
 - 🗺️ Interactive world map with 60+ cities, to be continued
@@ -12,7 +14,7 @@ A real-time interactive world map for digital nomads — find the sunniest citie
 
 ## Live Demo
 
-🔗 [Coming soon](#) 
+🔗 [https://littlecoolan.github.io/SunChase/](#) 
 
 ## Run Locally
 
@@ -32,6 +34,8 @@ MIT © [littlecoolan](https://github.com/littlecoolan)
 
 一个为数字游民/旅居人设计的实时全球天气地图，帮你找到此刻阳光最充足的城市。
 
+<img width="1507" height="824" alt="中文界面" src="https://github.com/user-attachments/assets/771a03ef-4e01-45de-ac2d-0a9cd0db8dd5" />
+
 ## 功能
 
 - 🗺️ 全球交互式地图，覆盖 60+ 城市，持续更新中
@@ -42,7 +46,7 @@ MIT © [littlecoolan](https://github.com/littlecoolan)
 
 ## 在线体验
 
-🔗 [即将上线](#)
+🔗 [https://littlecoolan.github.io/SunChase/](#)
 
 ## 本地运行
 
