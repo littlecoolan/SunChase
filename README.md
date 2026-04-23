@@ -14,7 +14,7 @@ A real-time interactive world map for digital nomads — find the sunniest citie
 
 ## Live Demo
 
-🔗 [https://littlecoolan.github.io/SunChase/](#) 
+🔗 [click now](https://littlecoolan.github.io/SunChase/) 
 
 ## Run Locally
 
@@ -46,7 +46,7 @@ MIT © [littlecoolan](https://github.com/littlecoolan)
 
 ## 在线体验
 
-🔗 [https://littlecoolan.github.io/SunChase/](#)
+🔗 [点击体验](https://littlecoolan.github.io/SunChase/)
 
 ## 本地运行
 
